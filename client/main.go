@@ -1,29 +1,28 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"html/template"
 	"log"
 	"net/http"
 )
 
+// HomeHandler serves the main page with the WebRTC client
+func HomeHandler(w http.ResponseWriter, r *http.Request) {
+	tmpl, err := template.ParseFiles("client/index.html")
+	if err != nil {
+		log.Println("Error parsing template:", err)
+		return
+	}
+	tmpl.Execute(w, nil)
+}
+
 func main() {
-	// Define the server's health check URL
-	url := "http://localhost:8080/health"
+	http.HandleFunc("/", HomeHandler)
+	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("client/static"))))
 
-	// Make an HTTP GET request to the server
-	resp, err := http.Get(url)
+	log.Println("Client server started on :8081")
+	err := http.ListenAndServe(":8081", nil)
 	if err != nil {
-		log.Fatalf("Failed to make request: %v", err)
+		log.Fatalf("Server failed to start: %v", err)
 	}
-	defer resp.Body.Close()
-
-	// Read the server's response
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		log.Fatalf("Failed to read response body: %v", err)
-	}
-
-	// Print the server's response
-	fmt.Println("Server Response:", string(body))
 }
