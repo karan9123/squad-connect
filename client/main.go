@@ -8,7 +8,7 @@ import (
 
 // HomeHandler serves the main page with the WebRTC client
 func HomeHandler(w http.ResponseWriter, r *http.Request) {
-	tmpl, err := template.ParseFiles("client/index.html")
+	tmpl, err := template.ParseFiles("index.html")
 	if err != nil {
 		log.Println("Error parsing template:", err)
 		return
