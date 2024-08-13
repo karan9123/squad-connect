@@ -1,90 +1,73 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"sync"
 
 	"github.com/gorilla/websocket"
 )
 
-// Room structure to manage participants
+// Room structure to hold room ID and participants
 type Room struct {
 	ID           string
 	Participants map[string]*websocket.Conn
-	mu           sync.Mutex
+	Mutex        sync.Mutex
 }
 
 // SignalingServer structure to manage rooms
 type SignalingServer struct {
 	Rooms map[string]*Room
-	mu    sync.Mutex
+	Mutex sync.Mutex
 }
 
-var server = SignalingServer{
-	Rooms: make(map[string]*Room),
-}
-
-// WebSocket upgrader
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
 }
 
-// Handle WebSocket connection
+// HandleConnection handles new WebSocket connections
 func (s *SignalingServer) HandleConnection(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println("Failed to upgrade connection:", err)
+		fmt.Println("Failed to upgrade to WebSocket:", err)
 		return
 	}
 	defer conn.Close()
 
-	// Placeholder: In a real-world scenario, handle room joining here
-	roomID := "default" // Simplified for now
-	participantID := r.URL.Query().Get("participant")
-
-	s.JoinRoom(roomID, participantID, conn)
-
-	for {
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			log.Println("Read error:", err)
-			break
-		}
-
-		s.HandleMessage(roomID, participantID, message)
+	// Read initial message to determine room and participant ID
+	var msg struct {
+		RoomID        string `json:"room_id"`
+		ParticipantID string `json:"participant_id"`
 	}
-}
-
-// Handle incoming signaling messages
-func (s *SignalingServer) HandleMessage(roomID string, participantID string, message []byte) {
-	room, exists := s.Rooms[roomID]
-	if !exists {
-		log.Println("Room not found:", roomID)
+	err = conn.ReadJSON(&msg)
+	if err != nil {
+		fmt.Println("Failed to read JSON message:", err)
 		return
 	}
 
-	room.mu.Lock()
-	defer room.mu.Unlock()
+	// Join the participant to the room
+	s.JoinRoom(msg.RoomID, msg.ParticipantID, conn)
 
-	for id, conn := range room.Participants {
-		if id != participantID {
-			err := conn.WriteMessage(websocket.TextMessage, message)
-			if err != nil {
-				log.Println("Write error:", err)
-				conn.Close()
-				delete(room.Participants, id)
-			}
+	// Handle further signaling messages
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			fmt.Println("Failed to read message:", err)
+			break
 		}
+		s.HandleMessage(msg.RoomID, message)
 	}
+
+	// Remove participant from room on disconnection
+	s.LeaveRoom(msg.RoomID, msg.ParticipantID)
 }
 
-// JoinRoom allows a participant to join a room
+// JoinRoom adds a participant to the specified room
 func (s *SignalingServer) JoinRoom(roomID string, participantID string, conn *websocket.Conn) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
 	room, exists := s.Rooms[roomID]
 	if !exists {
@@ -95,27 +78,63 @@ func (s *SignalingServer) JoinRoom(roomID string, participantID string, conn *we
 		s.Rooms[roomID] = room
 	}
 
-	room.mu.Lock()
-	defer room.mu.Unlock()
-
+	room.Mutex.Lock()
 	room.Participants[participantID] = conn
-	log.Printf("Participant %s joined room %s", participantID, roomID)
+	room.Mutex.Unlock()
+
+	fmt.Printf("Participant %s joined room %s\n", participantID, roomID)
 }
 
-func main() {
-	http.HandleFunc("/ws", server.HandleConnection)
-	http.HandleFunc("/health", healthCheckHandler)
+// LeaveRoom removes a participant from the specified room
+func (s *SignalingServer) LeaveRoom(roomID string, participantID string) {
+	s.Mutex.Lock()
+	defer s.Mutex.Unlock()
 
-	log.Println("Signaling server started on :8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		log.Fatalf("Server failed to start: %v", err)
+	room, exists := s.Rooms[roomID]
+	if !exists {
+		return
+	}
+
+	room.Mutex.Lock()
+	delete(room.Participants, participantID)
+	room.Mutex.Unlock()
+
+	fmt.Printf("Participant %s left room %s\n", participantID, roomID)
+
+	if len(room.Participants) == 0 {
+		delete(s.Rooms, roomID)
+		fmt.Printf("Room %s is empty and has been removed\n", roomID)
 	}
 }
 
-// healthCheckHandler responds with a simple health check message
-func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Yooo!, this is a running server"))
-	log.Println("Health check endpoint hit")
+// HandleMessage relays signaling messages to all participants in the room
+func (s *SignalingServer) HandleMessage(roomID string, message []byte) {
+	room, exists := s.Rooms[roomID]
+	if !exists {
+		return
+	}
+
+	room.Mutex.Lock()
+	defer room.Mutex.Unlock()
+
+	for _, conn := range room.Participants {
+		err := conn.WriteMessage(websocket.TextMessage, message)
+		if err != nil {
+			fmt.Println("Failed to send message:", err)
+		}
+	}
+}
+
+func main() {
+	server := &SignalingServer{
+		Rooms: make(map[string]*Room),
+	}
+
+	http.HandleFunc("/ws", server.HandleConnection)
+
+	fmt.Println("Signaling server started on :8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		fmt.Println("Failed to start server:", err)
+	}
 }
