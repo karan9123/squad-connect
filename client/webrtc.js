@@ -1,26 +1,4 @@
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Squad Connect</title>
-</head>
-<body>
-    <h1>Squad Connect</h1>
-    <div>
-        <label for="roomID">Room ID:</label>
-        <input type="text" id="roomID" placeholder="Enter Room ID">
-        <br>
-        <label for="participantID">Participant ID:</label>
-        <input type="text" id="participantID" placeholder="Enter Your ID">
-        <br>
-        <button onclick="connectToRoom()">Join Room</button>
-    </div>
-    <div id="video-container">
-        <video id="localVideo" autoplay muted></video>
-        <div id="remoteVideos"></div>
-    </div>
-    <script>
-        let localVideo = document.getElementById('localVideo');
+let localVideo = document.getElementById('localVideo');
 let remoteVideos = document.getElementById('remoteVideos');
 let muteButton = document.getElementById('muteButton');
 let videoButton = document.getElementById('videoButton');
@@ -151,12 +129,8 @@ async function start() {
     ws.onmessage = handleSignalingMessage;
 
     // Set up event listeners for mute and video buttons
-    //muteButton.addEventListener('click', toggleMute);
-    //videoButton.addEventListener('click', toggleVideo);
+    muteButton.addEventListener('click', toggleMute);
+    videoButton.addEventListener('click', toggleVideo);
 }
 
 start();
-
-    </script>
-</body>
-</html>

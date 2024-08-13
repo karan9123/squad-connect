@@ -18,6 +18,7 @@ func HomeHandler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	http.HandleFunc("/", HomeHandler)
+	http.HandleFunc("/health", healthCheckHandler)
 	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("client/static"))))
 
 	log.Println("Client server started on :8081")
@@ -25,4 +26,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("Server failed to start: %v", err)
 	}
+}
+
+// healthCheckHandler responds with a simple health check message
+func healthCheckHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte("Yooo!, this is a running server"))
+	log.Println("Health check endpoint hit")
 }
